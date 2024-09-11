@@ -17,16 +17,16 @@
 ### Train
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node 4 --master_port 1200 train_llama.py --ckpt_dir $LLAMA_CKPTS/30B --tokenizer_path $LLAMA_CKPTS/tokenizer.model --input_file data/gsm8k-xl/train.json --lr 1e-3 --num_epochs 10
+CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.run --nproc_per_node 2 --master_port 1200 train_llama.py --ckpt_dir /remote-home/share/models/llama/13B --tokenizer_path /remote-home/share/models/llama/tokenizer.model --input_file data/gsm8k-xl/train.json --lr 1e-3 --num_epochs 10
 ```
 
 ### Inference
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node 4 --master_port 1250 inference_llama.py --ckpt_dir $LLAMA_CKPTS/30B --tokenizer_path $LLAMA_CKPTS/tokenizer.model --mode func_embedding --dataset gsm8k-xl  --func_load_path checkpoints/gsm8k-xl/epoch_3.pth --logits_bias 3.0
+CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.run --nproc_per_node 2 --master_port 1250 inference_llama.py --ckpt_dir /remote-home/share/models/llama/13B --tokenizer_path /remote-home/share/models/llama/tokenizer.model --mode func_embedding --dataset gsm8k-xl  --func_load_path checkpoints/gsm8k-xl/epoch_9.pth --logits_bias 3.0
 ```
 
-## FuncQA
+## FuncQA todo
 
 ### Train
 
@@ -46,7 +46,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node 4 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node 4 --master_port 1250 inference_llama.py --ckpt_dir $LLAMA_CKPTS/30B --tokenizer_path $LLAMA_CKPTS/tokenizer.model --mode func_embedding --dataset funcqa_mh --func_load_path checkpoints/funcqa/epoch_7.pth --logits_bias 4.0
 ```
 
-## VirtualHome
+## VirtualHome todo
 
 ### Training
 ```bash
@@ -64,7 +64,7 @@ CUDA_VISIBLE_DEVICES=3,5 python -m torch.distributed.run --nproc_per_node 2 infe
 
 See `evaluation/eval_vh.ipynb`
 
-## KAMEL
+## KAMEL todo
 ### Train
 + synthetic data
 ```bash
@@ -86,3 +86,38 @@ CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.run --nproc_per_node 2 infe
 ### Evaluation
 
 See `evaluation/eval_kamel.ipynb`
+
+### Vscode debug
+add `lanuch.json`
+```json
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run inference_llama.py",
+            "type": "debugpy", 
+            "request": "launch",
+            "module": "torch.distributed.run",  // 直接指定模块
+            "console": "integratedTerminal",
+            "cwd": "/remote-home/jyang/ToolkenGPT",
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "2,3"
+            },
+            "args": [
+                "--nproc_per_node", "2",
+                "--master_port", "1250",
+                "inference_llama.py",  // 指定要运行的脚本
+                "--ckpt_dir", "/remote-home/share/models/llama/13B",
+                "--tokenizer_path", "/remote-home/share/models/llama/tokenizer.model",
+                "--mode", "func_embedding",
+                "--dataset", "gsm8k-xl",
+                "--func_load_path", "checkpoints/gsm8k-xl/epoch_9.pth",
+                "--logits_bias", "3.0"
+            ],
+            "python": "/remote-home/jyang/miniconda3/envs/ToolkenGPT/bin/python",  // 确保这是你使用的Python解释器
+            "subProcess": true,
+            "justMyCode": true
+        }
+    ]
+}
+```

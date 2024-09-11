@@ -162,7 +162,7 @@ def main(ckpt_dir: str, tokenizer_path: str, temperature: float = 0, top_p: floa
     funcmodel.set_bias(logits_bias)
     funcmodel.eval()
 
-    for case_idx, question in tqdm(enumerate(test_cases), total=len(test_cases)):
+    for case_idx, question in tqdm(enumerate(test_cases), total=len(test_cases), desc="Processing"):
         if case_idx < st_idx:
             continue
         if case_idx >= ed_idx:
@@ -173,7 +173,8 @@ def main(ckpt_dir: str, tokenizer_path: str, temperature: float = 0, top_p: floa
             log = vh_embedding_inference(case_idx, question, funcmodel, temperature, top_p, max_func_call)
         elif mode == "kamel_embedding_inference":
             log = kamel_embedding_inference(templates, case_idx, question, funcmodel, temperature, top_p, max_gen_len, max_func_call)
-
+        
+        # 只有在主进程才会将推理结果写入文件。
         if local_rank == 0:
             try:
                 func_model_name = func_load_path.split('/')[-1].split('.')[0]

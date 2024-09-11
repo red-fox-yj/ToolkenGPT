@@ -26,13 +26,23 @@ def setup_model_parallel() -> Tuple[int, int]:
     torch.cuda.set_device(local_rank)
     return local_rank, world_size
 
-
 def load(ckpt_dir: str, tokenizer_path: str, local_rank: int, world_size: int, func_dict: dict) -> FunctionLM:
+    """
+    从检查点文件加载预训练模型，初始化模型和分词器，并返回包含加载后的模型和分词器的 FunctionLM 实例。
+
+    ckpt_dir (str): 模型检查点文件 (.pth) 存储的目录，该目录还应包含模型配置的 'params.json' 文件。
+    tokenizer_path (str): 用于分词输入数据的分词器模型文件的路径。
+    local_rank (int): 当前进程在分布式训练中的 rank，用于确定加载哪个检查点文件。
+    world_size (int): 分布式训练中的总进程数，用于确保有足够的检查点文件供每个进程加载。
+    func_dict (dict): 包含功能相关的映射或模型附加配置的字典。
+    """
     start_time = time.time()
     checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
+    # 使用 assert 语句确保检查点文件的数量与 world_size 一致，确保每个分布式进程都有一个对应的检查点文件
     assert (
         world_size == len(checkpoints)
     ), f"Loading a checkpoint for MP={len(checkpoints)} but world size is {world_size}"
+    # 根据 local_rank 选择当前进程应该加载的检查点文件
     ckpt_path = checkpoints[local_rank]
     print("Loading")
     checkpoint = torch.load(ckpt_path, map_location="cpu")
@@ -111,6 +121,7 @@ def main(ckpt_dir: str, tokenizer_path: str, input_file: str = None, lr: float =
         
         random.shuffle(trainset)
         for case_idx, prompt in tqdm(enumerate(trainset)):
+            # 将模型设置为训练模式
             funcmodel.train()
             
             optimizer.zero_grad()

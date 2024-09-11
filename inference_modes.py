@@ -12,8 +12,9 @@ def func_embedding_inference(templates, case_idx, question, funcmodel, temperatu
     try:
         results = []
         func_calls = []
-        while True:
+        while True: # 如果没有找到 op( 这样的模式则循环结束
             prompt = templates["general"].replace("[QUESTION]", question) + cur_generation
+            # func_embedding模式生成下一步的'op('
             results = funcmodel.generate([prompt], max_gen_len=max_gen_len, temperature=temperature, top_p=top_p, stop_token=[13], return_top=return_top)
             if return_top > 0:
                 results, token_log = results
@@ -21,11 +22,14 @@ def func_embedding_inference(templates, case_idx, question, funcmodel, temperatu
             endflag = True
             current_token = 0
             record_tokens = token_log[-1]
-            cur_generation = results[0].replace(templates["general"].replace("[QUESTION]", question), "")
+            # 摘出模型生成的部分
+            cur_generation = results[0].replace(templates["general"].replace("[QUESTION]", question), "") # ' 4096 eggs x 8 = <multiply>('
+            # 遍历func_map（函数列表），如果当前生成内容以某个函数调用结束，例如 op(，则表示模型推测该函数会被调用
             for op in func_map:
                 if cur_generation.endswith(op+"("):
                     endflag = False
                     if start_length and end_length:
+                        # 如果之前已经记录了函数调用位置（start_length 和 end_length），则将这些函数调用嵌入到生成的文本中
                         bias = 0
                         # copy the current generation to cur_generation_with_func
                         cur_generation_with_func = cur_generation
@@ -37,7 +41,8 @@ def func_embedding_inference(templates, case_idx, question, funcmodel, temperatu
                     prompt = templates[op].replace("[QUESTION]", question) + cur_generation_with_func
                     len_prompt = len(prompt)
                     funcmodel.inference_mode = "baseline"
-                    results = funcmodel.generate([prompt], max_gen_len=max_gen_len, temperature=temperature, top_p=top_p, stop_token=[29897, 3892], return_top=return_top)
+                    # baseline模式填充参数
+                    results = funcmodel.generate([prompt], max_gen_len=max_gen_len, temperature=temperature, top_p=top_p, stop_token=[29897, 3892], return_top=return_top) # 4096 eggs x 8 = <multiply>(4096, 8)=
                     funcmodel.inference_mode = "func_embedding"
                     if return_top > 0:
                         results, token_log = results
@@ -65,6 +70,7 @@ def func_embedding_inference(templates, case_idx, question, funcmodel, temperatu
                             temp[arg_i] = arg
                         args = f"({', '.join(temp)})"
                     try:
+                        # 执行计算
                         res = eval(f"{op[1:-1]}_{args}")
                         func_calls.append(f"{op}{args} = {res}")
                         start_length.append(len(cur_generation.split(op)[0]))
@@ -74,6 +80,7 @@ def func_embedding_inference(templates, case_idx, question, funcmodel, temperatu
                         # only generate the next token
                         # disable all the numbers
                         prompt = templates["general"].replace("[QUESTION]", question) + cur_generation
+                        # 通过 max_gen_len=1，只生成一个 token。这种逐步生成的方式可以更加精确地控制生成的内容，尤其是在需要紧密跟踪生成逻辑的情况下。
                         results = funcmodel.generate([prompt], max_gen_len=1, temperature=temperature, top_p=top_p, stop_token=[13], return_top=return_top, disable_token = [29900, 29896, 29906, 29941, 29946, 29945, 29953, 29955, 29947, 29929]) # disable all the numbers: 0-9
                         if return_top > 0:
                             results, token_log = results

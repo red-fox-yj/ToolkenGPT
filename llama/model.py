@@ -251,6 +251,7 @@ class FunctionLM(nn.Module):
         # self.func_embed = ColumnParallelLinear(
         #     base_model.params.dim, len(func_list), bias=False, init_method=lambda x: x
         # )
+        # 唯一可更新的参数
         self.func_embed = nn.Linear(base_model.params.dim, len(func_dict), bias=False).to("cuda")
         if load_path is not None and load_path != "None": # load func_embed weights
             embedding = torch.load(load_path)
@@ -289,6 +290,7 @@ class FunctionLM(nn.Module):
             if "tar_eq" not in raw_inputs:
                 raw_inputs["tar_eq"] = ["<" + raw_inputs["api"] + ">"]
 
+            # start_token_idx 和 end_token_idx 指定了目标函数在文本中的位置
             for s, t, eq in zip(raw_inputs["start_token_idx"], raw_inputs["end_token_idx"], raw_inputs["tar_eq"]):
                 
                 # for different data formats
@@ -300,13 +302,16 @@ class FunctionLM(nn.Module):
 
                 if op not in self.func_dict:
                     op = op[1:-1]
+                # s的位置替换为func_dict中相应函数的索引加上32000的值，以区别于普通词汇token。
                 labels[s] = self.func_dict[op] + 32000
+                # [s+1: t]位置的 token 被标记为 -100，它们不会被纳入损失计算。
                 labels[s+1: t] = -100
             
             # labels = labels[1:]
             if only_functoken:
                 labels[labels < 32000] = -100
-            inputs = raw_input_ids[:-1].expand(1, -1).to("cuda")
+            # 因为需要预测下一个token所以需要错开
+            inputs = raw_input_ids[:-1].expand(1, -1).to("cuda") 
             labels = labels[1:].expand(1, -1).to("cuda")
 
             last_logits, h = self.model(inputs, 0) # h: (bsz, seqlen, dim)
@@ -316,7 +321,7 @@ class FunctionLM(nn.Module):
         func_logits = self.func_embed(h.float()) # (bsz, seqlen, len(func_list))
         
         concat_logits = torch.cat([token_logits, func_logits], dim=-1) # (bsz, seqlen, vocab_size + len(func_list))
-        loss = F.cross_entropy(concat_logits.view(-1, concat_logits.shape[-1]), labels.view(-1), ignore_index=-100)
+        loss = F.cross_entropy(concat_logits.view(-1, concat_logits.shape[-1]), labels.view(-1), ignore_index=-100) # (bsz * seqlen, vocab_size + len(func_list)) vs (bsz * seqlen)
         # check p, r, f1 for each function
         pred = torch.argmax(concat_logits, dim=-1) # (bsz, seqlen)
         pred = pred.view(-1)
@@ -361,7 +366,9 @@ class FunctionLM(nn.Module):
         obj_encodings = [self.tokenizer.encode("<"+obj+">", bos=False, eos=False)[1:-1] for obj in objs]
         # print("obj encoding", obj_encodings)
         assert bsz == 1
+        # 多个token组成的终止条件
         stop_token_substr = [torch.tensor(x).cuda().long() for x in stop_token if isinstance(x, list)]
+        # 单个token的终止条件
         stop_token_single = [x for x in stop_token if isinstance(x, int)]
         
         func_list = list(self.func_dict.keys())
@@ -377,42 +384,51 @@ class FunctionLM(nn.Module):
 
         min_prompt_size = min([len(t) for t in prompt_tokens])
         max_prompt_size = max([len(t) for t in prompt_tokens])
-
+        # 限制生成的最大长度，不能超过模型的最大序列长度
         total_len = min(params.max_seq_len, max_gen_len + max_prompt_size)
 
+        # 初始化token序列，并将每个prompt_tokens的token放入相应的位置，其他位置填充为pad_id
         tokens = torch.full((bsz, total_len), self.tokenizer.pad_id).cuda().long()
         for k, t in enumerate(prompt_tokens):
             tokens[k, : len(t)] = torch.tensor(t).long()
+        # 生成掩码，prompt_tokens对应部分为true，pad_id部分为false
         input_text_mask = tokens != self.tokenizer.pad_id
+        # 从最小的提示长度开始生成
         start_pos = min_prompt_size
         prev_pos = 0
         hs = []
         
         for cur_pos in range(start_pos, total_len):
+            # 切片操作选取了当前批次的所有样本，但只取了从prev_pos到cur_pos之间的token作为当前步的输入提供给模型
             _, h = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
             logits_token = self.model.output(h[:, -1, :]).float() # (bsz, vocab_size)
             logits_func = self.func_embed(h[:, -1, :].float()) # (bsz, len(func_list))
             if self.inference_mode != "func_embedding":
+                # 如果不在函数嵌入模式，禁用函数logits
                 logits_func = torch.zeros_like(logits_func) - 1e5
             
+            # 禁用某些token
             if len(disable_token) > 0:
                 logits_token[:, disable_token] = -1e5
 
             # topk: (bsz, 3)
             # print("after-topk", topk[1][0], [self.tokenizer.decode([x]) for x in topk[1][0].tolist()])
 
+            # 禁用某些函数
             for i, func in enumerate(disable_func):
                 func_id = self.func_dict[func]
                 logits_func[:, func_id] = -1e5
             logits_func += self.logits_bias
             logits = torch.cat([logits_token, logits_func], dim=-1)
             if temperature > 0:
+                # 使用带温度调整的softmax和nucleus sampling(top-p采样)
                 probs = torch.softmax(logits / temperature, dim=-1)
                 next_token = sample_top_p(probs, top_p)
             else:
+                # 直接选择概率最高的 token（贪婪搜索）
                 next_token = torch.argmax(logits, dim=-1)
             next_token = next_token.reshape(-1)
-            # only replace token if the prompt is ended
+            # 保留输入提示部分的token，只替换生成部分的token
             next_token = torch.where(
                 input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token
             )
@@ -422,31 +438,37 @@ class FunctionLM(nn.Module):
                 )
             tokens[:, cur_pos] = next_token
             prev_pos = cur_pos
-
+            
+            # 检查是否到达终止条件
             if next_token[0] >= 32000 or next_token[0] in stop_token_single:
                 # print("breaking!!")
                 break
-
+            
+            # 检查是否到达终止条件
             if any([torch.equal(tokens[0, cur_pos - len(substr) + 1: cur_pos + 1], substr) for substr in stop_token_substr]):
                 break
 
 
         decoded = []
         for i, t in enumerate(tokens.tolist()):
-            # cut to max gen len
+            # 对生成的序列进行长度限制
             t = t[: len(prompt_tokens[i]) + max_gen_len]
             # cut to eos tok if any
             try:
+                # 即如果在生成的序列中出现了eos，则只保留从头到eos的部分
                 t = t[: t.index(self.tokenizer.eos_id)]
             except ValueError:
+                # 即没有eos时不截断
                 pass
             if t[cur_pos] >= 32000:
                 if no_left_parens:
                     decoded.append(self.tokenizer.decode(t[:cur_pos]) + self.func_list[t[cur_pos] - 32000])
-                else:
+                else: 
                     if "<" in self.func_list[0]:
+                        # 如果 func_list[0] 中包含 <，说明函数的格式是 "<function_name>"，解码时会在函数名称后面加上左括号 (
                         decoded.append(self.tokenizer.decode(t[:cur_pos]) + self.func_list[t[cur_pos] - 32000] + "(")
                     elif "[" in self.func_list[0]:
+                        # 如果 func_list[0] 中包含 [，说明函数的格式可能是数组或列表类型，解码时会在函数名称后面加上 " <"
                         decoded.append(self.tokenizer.decode(t[:cur_pos]) + self.func_list[t[cur_pos] - 32000] + " <")
                     else:
                         raise NotImplementedError
