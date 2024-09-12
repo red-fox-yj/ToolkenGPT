@@ -12,12 +12,12 @@
 + (For VirtualHome) Please download the data following the instructions [here](virtualhome/README.md).
     > A side note: the folder `virtualhome` is from its [official repo](https://github.com/xavierpuigf/virtualhome), but we fixed some small bugs in the evolving graph.
 
-## GSM8K-XL
+## GSM8K-XL LLaMA-33B
 
 ### Train
 
 ```bash
-CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.run --nproc_per_node 2 --master_port 1200 train_llama.py --ckpt_dir /remote-home/share/models/llama/13B --tokenizer_path /remote-home/share/models/llama/tokenizer.model --input_file data/gsm8k-xl/train.json --lr 1e-3 --num_epochs 10
+CUDA_VISIBLE_DEVICES=1,2 python -m torch.distributed.run --nproc_per_node 2 --master_port 1200 train_llama.py --ckpt_dir /remote-home/share/models/llama/13B --tokenizer_path /remote-home/share/models/llama/tokenizer.model --input_file data/gsm8k-xl/train.json --lr 1e-3 --num_epochs 10
 ```
 
 ### Inference
@@ -26,68 +26,68 @@ CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.run --nproc_per_node 2 --ma
 CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.run --nproc_per_node 2 --master_port 1250 inference_llama.py --ckpt_dir /remote-home/share/models/llama/13B --tokenizer_path /remote-home/share/models/llama/tokenizer.model --mode func_embedding --dataset gsm8k-xl  --func_load_path checkpoints/gsm8k-xl/epoch_9.pth --logits_bias 3.0
 ```
 
-## FuncQA todo
+## FuncQA LLaMA-30B
 
 ### Train
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node 4 --master_port 1200 train_llama.py --ckpt_dir $PATH_TO_LLAMA/30B --tokenizer_path $PATH_TO_LLAMA/tokenizer.model --input_file data/funcqa/train.json --lr 1e-4 --num_epochs 10
-```
+CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node 4 --master_port 1200 train_llama.py --ckpt_dir /remote-home/share/models/llama/30B --tokenizer_path /remote-home/share/models/llama/tokenizer.model --input_file data/funcqa/train.json --lr 1e-4 --num_epochs 10
+``
 
 ### Inference (1-hop)
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node 4 --master_port 1250 inference_llama.py --ckpt_dir $LLAMA_CKPTS/30B --tokenizer_path $LLAMA_CKPTS/tokenizer.model --mode func_embedding --dataset funcqa_oh --func_load_path checkpoints/funcqa/epoch_7.pth --logits_bias 2.7
+CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node 4 --master_port 1250 inference_llama.py --ckpt_dir $LLAMA_CKPTS/30B --tokenizer_path /remote-home/share/models/llama/tokenizer.model --mode func_embedding --dataset funcqa_oh --func_load_path checkpoints/funcqa/epoch_7.pth --logits_bias 2.7
 ```
 
 ### Inference (MultiHop)
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node 4 --master_port 1250 inference_llama.py --ckpt_dir $LLAMA_CKPTS/30B --tokenizer_path $LLAMA_CKPTS/tokenizer.model --mode func_embedding --dataset funcqa_mh --func_load_path checkpoints/funcqa/epoch_7.pth --logits_bias 4.0
+CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node 4 --master_port 1250 inference_llama.py --ckpt_dir $LLAMA_CKPTS/30B --tokenizer_path /remote-home/share/models/llama/tokenizer.model --mode func_embedding --dataset funcqa_mh --func_load_path checkpoints/funcqa/epoch_7.pth --logits_bias 4.0
 ```
 
-## VirtualHome todo
+## VirtualHome VirtualHome
 
 ### Training
 ```bash
-python -m torch.distributed.run --nproc_per_node 2 --master_port 3001 train_llama.py --ckpt_dir $LLAMA_CKPTS/13B --tokenizer_path $LLAMA_CKPTS/tokenizer.model --dataset vh --input_file data/vh/legal_train_v4_embedding.json --only_functoken True --num_epochs 10
+python -m torch.distributed.run --nproc_per_node 2 --master_port 3001 train_llama.py --ckpt_dir $LLAMA_CKPTS/13B --tokenizer_path /remote-home/share/models/llama/tokenizer.model --dataset vh --input_file data/vh/legal_train_v4_embedding.json --only_functoken True --num_epochs 10
 ```
 
 
 ### Inference
 
 ```bash
-CUDA_VISIBLE_DEVICES=3,5 python -m torch.distributed.run --nproc_per_node 2 inference_llama.py --ckpt_dir $LLAMA_CKPTS/13B --tokenizer_path $LLAMA_CKPTS/tokenizer.model --mode vh_embedding_inference --dataset vh --func_load_path checkpoints/vh/epoch_7.pth --logits_bias 10.0
+CUDA_VISIBLE_DEVICES=3,5 python -m torch.distributed.run --nproc_per_node 2 inference_llama.py --ckpt_dir $LLAMA_CKPTS/13B --tokenizer_path /remote-home/share/models/llama/tokenizer.model --mode vh_embedding_inference --dataset vh --func_load_path checkpoints/vh/epoch_7.pth --logits_bias 10.0
 ```
 
 ### Evaluation
 
 See `evaluation/eval_vh.ipynb`
 
-## KAMEL todo
+## KAMEL LLaMA-13B
 ### Train
 + synthetic data
 ```bash
-CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.run --nproc_per_node 2 --master_port 3002 train_llama.py --ckpt_dir $LLAMA_CKPTS/13B --tokenizer_path $LLAMA_CKPTS/tokenizer.model --dataset kamel --input_file data/kamel/train_clean.json --only_functoken False ---log_every 500 --num_epochs 10
+CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.run --nproc_per_node 2 --master_port 3002 train_llama.py --ckpt_dir /remote-home/share/models/llama/13B --tokenizer_path /remote-home/share/models/llama/tokenizer.model --dataset kamel --input_file data/kamel/train_clean.json --only_functoken False  ---log_prefix synthetic-data- --num_epochs 10
 ```
 
 
 + supervised data
 ```bash
-CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.run --nproc_per_node 2 --master_port 3002 train_llama.py --ckpt_dir $LLAMA_CKPTS/13B --tokenizer_path $LLAMA_CKPTS/tokenizer.model --dataset kamel --input_file data/kamel/kamel_id_train.json --only_functoken False ---log_every 500 --num_epochs 10
+CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.run --nproc_per_node 2 --master_port 3002 train_llama.py --ckpt_dir /remote-home/share/models/llama/13B --tokenizer_path /remote-home/share/models/llama/tokenizer.model --dataset kamel --input_file data/kamel/kamel_id_train.json --only_functoken False ---log_prefix supervised-data- --num_epochs 10
 ```
 
 ### Inference
 
 ```bash
-CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.run --nproc_per_node 2 inference_llama.py --ckpt_dir $LLAMA_CKPTS/13B --tokenizer_path $LLAMA_CKPTS/tokenizer.model --mode kamel_embedding_inference --dataset kamel_30 --func_load_path checkpoints/kamel/epoch_4.pth --logits_bias 10
+CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.run --nproc_per_node 2 inference_llama.py --ckpt_dir $LLAMA_CKPTS/13B --tokenizer_path /remote-home/share/models/llama/tokenizer.model --mode kamel_embedding_inference --dataset kamel_30 --func_load_path checkpoints/kamel/epoch_4.pth --logits_bias 10
 ```
 
 ### Evaluation
 
 See `evaluation/eval_kamel.ipynb`
 
-### Vscode debug
+## Vscode debug
 add `lanuch.json`
 ```json
 {
